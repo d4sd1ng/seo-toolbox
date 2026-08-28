@@ -1,0 +1,17 @@
+{
+  "name": "seo-toolbox",
+  "private": true,
+  "packageManager": "pnpm@9.12.0",
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "dev:worker": "pnpm --filter worker dev",
+    "dev:stack": "docker compose up -d && pnpm --filter web dev & pnpm --filter worker dev",
+    "db:generate": "pnpm --filter db generate",
+    "db:migrate": "pnpm --filter db migrate",
+    "db:push": "pnpm --filter db push",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.0"
+  }
+}
