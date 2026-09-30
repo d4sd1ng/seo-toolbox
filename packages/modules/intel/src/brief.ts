@@ -1,5 +1,5 @@
 import { prisma } from "db";
-import { fetchOrganicSerp } from "./provider";
+import { fetchOrganicSerp, hasSerper, serperSearch } from "./provider";
 
 export async function runContentBrief(input: {
   projectId: string;
@@ -36,23 +36,43 @@ export async function runContentBrief(input: {
     update: {},
   });
 
-  const serp = await fetchOrganicSerp(phrase);
+  let extras = { peopleAlsoAsk: [] as string[], related: [] as string[] };
+  let serp;
+  if (await hasSerper(input.workspaceId)) {
+    const raw = await serperSearch(phrase, {
+      country: project.defaultCountry,
+      workspaceId: input.workspaceId,
+    });
+    extras = { peopleAlsoAsk: raw.peopleAlsoAsk, related: raw.related };
+    serp = raw.organic.map((row) => ({
+      position: row.position,
+      url: row.link,
+      title: row.title,
+      domain: new URL(row.link).hostname.replace(/^www\./, ""),
+      snippet: row.snippet,
+    }));
+  } else {
+    serp = await fetchOrganicSerp(phrase, {
+      country: project.defaultCountry,
+      workspaceId: input.workspaceId,
+    });
+  }
   const snapshot = await prisma.serpSnapshot.create({
     data: {
       projectId: project.id,
       keywordId: keyword.id,
       query: phrase,
-      features: [],
+      features: extras.peopleAlsoAsk.length ? ["paa"] : [],
       results: serp,
     },
   });
 
-  const headingOutline = serp.slice(0, 8).map((row, i) => `H2: ${row.title}`);
+  const headingOutline = serp.slice(0, 8).map((row) => `H2: ${row.title}`);
   const entities = [...new Set(serp.flatMap((row) => tokenize(row.title)))].slice(0, 20);
-  const questions = serp
-    .map((row) => row.title)
-    .filter((t) => t.includes("?"))
-    .slice(0, 8);
+  const questions = [
+    ...extras.peopleAlsoAsk,
+    ...serp.map((row) => row.title).filter((t) => t.includes("?")),
+  ].slice(0, 8);
 
   const brief = await prisma.contentBrief.create({
     data: {
@@ -62,7 +82,7 @@ export async function runContentBrief(input: {
       entities,
       questions,
       wordCountTarget: 1200,
-      notes: `SERP-Snapshot ${snapshot.id}. Top-Domain: ${serp[0]?.domain ?? "–"}`,
+      notes: `SERP-Snapshot ${snapshot.id}. Top: ${serp[0]?.domain ?? "–"}. Related: ${extras.related.slice(0, 5).join(", ")}`,
     },
   });
 

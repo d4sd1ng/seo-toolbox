@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
 import { prisma } from "db";
 
 export const SESSION_COOKIE = "seo_session";
@@ -18,18 +19,27 @@ function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
 
-async function writeCookie(token: string) {
-  const jar = await cookies();
-  jar.set(SESSION_COOKIE, token, {
+function cookieOptions() {
+  return {
     httpOnly: true,
-    sameSite: "lax",
+    sameSite: "lax" as const,
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: TTL_MS / 1000,
-  });
+    maxAge: Math.floor(TTL_MS / 1000),
+  };
 }
 
-export async function createSession(userId: string, workspaceId: string) {
+export function attachSessionCookie(response: NextResponse, token: string) {
+  response.cookies.set(SESSION_COOKIE, token, cookieOptions());
+  return response;
+}
+
+export function clearSessionCookieOn(response: NextResponse) {
+  response.cookies.set(SESSION_COOKIE, "", { ...cookieOptions(), maxAge: 0 });
+  return response;
+}
+
+export async function createSessionToken(userId: string, workspaceId: string) {
   const membership = await prisma.membership.findUnique({
     where: { workspaceId_userId: { workspaceId, userId } },
   });
@@ -43,7 +53,6 @@ export async function createSession(userId: string, workspaceId: string) {
       expiresAt: new Date(Date.now() + TTL_MS),
     },
   });
-  await writeCookie(token);
   return token;
 }
 
@@ -51,35 +60,36 @@ export async function getSession(): Promise<AuthSession | null> {
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
   if (!token) return null;
-  const row = await prisma.session.findUnique({
-    where: { tokenHash: hashToken(token) },
-    include: { user: true },
-  });
-  if (!row || row.expiresAt.getTime() < Date.now()) {
-    if (row) await prisma.session.delete({ where: { id: row.id } }).catch(() => undefined);
-    jar.delete(SESSION_COOKIE);
+  try {
+    const row = await prisma.session.findUnique({
+      where: { tokenHash: hashToken(token) },
+      include: { user: true },
+    });
+    if (!row || row.expiresAt.getTime() < Date.now()) {
+      if (row) await prisma.session.delete({ where: { id: row.id } }).catch(() => undefined);
+      return null;
+    }
+    const remaining = row.expiresAt.getTime() - Date.now();
+    if (remaining < REFRESH_AFTER_MS || Date.now() - row.lastSeenAt.getTime() > 10 * 60 * 1000) {
+      await prisma.session.update({
+        where: { id: row.id },
+        data: {
+          lastSeenAt: new Date(),
+          expiresAt: remaining < REFRESH_AFTER_MS ? new Date(Date.now() + TTL_MS) : row.expiresAt,
+        },
+      });
+    }
+    return {
+      sessionId: row.id,
+      userId: row.userId,
+      workspaceId: row.workspaceId,
+      exp: row.expiresAt.getTime(),
+      user: { id: row.user.id, email: row.user.email, name: row.user.name },
+    };
+  } catch (error) {
+    console.error("getSession", error);
     return null;
   }
-  const remaining = row.expiresAt.getTime() - Date.now();
-  if (remaining < REFRESH_AFTER_MS) {
-    await prisma.session.update({
-      where: { id: row.id },
-      data: { expiresAt: new Date(Date.now() + TTL_MS), lastSeenAt: new Date() },
-    });
-    await writeCookie(token);
-  } else if (Date.now() - row.lastSeenAt.getTime() > 10 * 60 * 1000) {
-    await prisma.session.update({
-      where: { id: row.id },
-      data: { lastSeenAt: new Date() },
-    });
-  }
-  return {
-    sessionId: row.id,
-    userId: row.userId,
-    workspaceId: row.workspaceId,
-    exp: row.expiresAt.getTime(),
-    user: { id: row.user.id, email: row.user.email, name: row.user.name },
-  };
 }
 
 export async function switchWorkspace(workspaceId: string) {
@@ -100,15 +110,12 @@ export async function destroySession() {
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
   if (token) {
-    await prisma.session.deleteMany({ where: { tokenHash: hashToken(token) } });
+    await prisma.session.deleteMany({ where: { tokenHash: hashToken(token) } }).catch(() => undefined);
   }
-  jar.delete(SESSION_COOKIE);
 }
 
 export async function destroyAllSessions(userId: string) {
   await prisma.session.deleteMany({ where: { userId } });
-  const jar = await cookies();
-  jar.delete(SESSION_COOKIE);
 }
 
 export async function listSessions(userId: string) {
@@ -132,10 +139,16 @@ export async function revokeSession(userId: string, sessionId: string) {
   await prisma.session.deleteMany({ where: { id: sessionId, userId } });
 }
 
+/** @deprecated use createSessionToken + attachSessionCookie */
 export async function setSessionCookie(input: { userId: string; workspaceId: string }) {
-  await createSession(input.userId, input.workspaceId);
+  const token = await createSessionToken(input.userId, input.workspaceId);
+  const jar = await cookies();
+  jar.set(SESSION_COOKIE, token, cookieOptions());
+  return token;
 }
 
 export async function clearSessionCookie() {
   await destroySession();
+  const jar = await cookies();
+  jar.delete(SESSION_COOKIE);
 }

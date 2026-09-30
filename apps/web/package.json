@@ -10,16 +10,17 @@
   "dependencies": {
     "core": "workspace:*",
     "db": "workspace:*",
-    "module-crawler": "workspace:*",
+    "google-auth-library": "^11.1.0",
     "module-gsc": "workspace:*",
+    "module-intel": "workspace:*",
     "module-onpage": "workspace:*",
     "module-pagespeed": "workspace:*",
-    "module-intel": "workspace:*",
     "next": "^15.4.0",
     "plugin-sdk": "workspace:*",
     "queue": "workspace:*",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "undici": "^6.29.0"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",

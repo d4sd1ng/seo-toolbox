@@ -1,0 +1,9 @@
+.env
+.env.*
+!.env.example
+apps/web/.env
+packages/db/.env
+**/.next
+node_modules
+backups/
+*.sql.gz

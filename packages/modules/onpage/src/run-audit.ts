@@ -1,6 +1,6 @@
 import { hostnameOf, normalizeUrl } from "core";
 import { prisma } from "db";
-import { renderUrl, shouldRender } from "module-crawler";
+import { renderUrl, shouldRender } from "module-crawler/runtime";
 import { analyzeHtml } from "./analyze";
 
 const FETCH_TIMEOUT_MS = 12_000;

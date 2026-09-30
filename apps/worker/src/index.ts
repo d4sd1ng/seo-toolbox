@@ -1,7 +1,8 @@
 import { config } from "dotenv";
 import { resolve } from "node:path";
-import { closeBrowser } from "module-crawler";
-import { createJobsWorker, processQueuedJob } from "queue";
+import { closeBrowser } from "module-crawler/runtime";
+import { createJobsWorker } from "queue";
+import { processQueuedJob } from "queue/process";
 
 config({ path: resolve(process.cwd(), "../../.env") });
 config();

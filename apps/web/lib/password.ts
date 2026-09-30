@@ -9,6 +9,12 @@ export function hashPassword(plain: string) {
 export function verifyPassword(plain: string, stored: string) {
   const [salt, hash] = stored.split(":");
   if (!salt || !hash) return false;
-  const next = scryptSync(plain, salt, 32);
-  return timingSafeEqual(Buffer.from(hash, "hex"), next);
+  try {
+    const next = scryptSync(plain, salt, 32);
+    const expected = Buffer.from(hash, "hex");
+    if (expected.length !== next.length) return false;
+    return timingSafeEqual(expected, next);
+  } catch {
+    return false;
+  }
 }

@@ -2,6 +2,44 @@ import { hostnameOf } from "core";
 import { prisma, workspacePlanCaps } from "db";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { enqueueJob } from "@/lib/jobs";
+
+async function startFirstRun(project: {
+  id: string;
+  workspaceId: string;
+  homepageUrl: string;
+}) {
+  const started: string[] = [];
+  try {
+    const onpage = await enqueueJob({
+      workspaceId: project.workspaceId,
+      projectId: project.id,
+      type: "onpage_audit",
+      moduleId: "onpage",
+      payload: { url: project.homepageUrl },
+    });
+    started.push(onpage.id);
+  } catch (error) {
+    console.error("autostart onpage", error);
+  }
+  try {
+    const crawl = await enqueueJob({
+      workspaceId: project.workspaceId,
+      projectId: project.id,
+      type: "site_crawl",
+      moduleId: "crawler",
+      payload: {
+        seedUrl: project.homepageUrl,
+        maxUrls: 80,
+        renderJavascript: false,
+      },
+    });
+    started.push(crawl.id);
+  } catch (error) {
+    console.error("autostart crawl", error);
+  }
+  return started;
+}
 
 export async function POST(request: Request) {
   const session = await getSession();
@@ -10,7 +48,7 @@ export async function POST(request: Request) {
   }
   const body = (await request.json()) as { url?: string; name?: string };
   if (!body.url) {
-    return NextResponse.json({ error: "url fehlt" }, { status: 400 });
+    return NextResponse.json({ error: "Bitte eine URL eintragen" }, { status: 400 });
   }
   let homepageUrl: string;
   try {
@@ -19,11 +57,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Ungültige URL" }, { status: 400 });
   }
 
-  const workspace = await prisma.workspace.findUniqueOrThrow({
-    where: { id: session.workspaceId },
-  });
-  const caps = await workspacePlanCaps(workspace.id);
-  const existing = await prisma.project.count({ where: { workspaceId: workspace.id } });
+  const caps = await workspacePlanCaps(session.workspaceId);
+  const existing = await prisma.project.count({ where: { workspaceId: session.workspaceId } });
   if (existing >= caps.projects) {
     return NextResponse.json(
       { error: `Projekt-Limit auf Plan ${caps.plan}: ${caps.projects}` },
@@ -33,7 +68,7 @@ export async function POST(request: Request) {
   const domain = hostnameOf(homepageUrl);
   const project = await prisma.project.create({
     data: {
-      workspaceId: workspace.id,
+      workspaceId: session.workspaceId,
       name: body.name?.trim() || domain,
       primaryDomain: domain,
       homepageUrl,
@@ -42,5 +77,6 @@ export async function POST(request: Request) {
       settings: { create: {} },
     },
   });
-  return NextResponse.json({ id: project.id });
+  const jobs = await startFirstRun(project);
+  return NextResponse.json({ id: project.id, jobs });
 }

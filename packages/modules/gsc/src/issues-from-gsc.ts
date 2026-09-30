@@ -1,5 +1,5 @@
 import { priorityScore } from "core";
-import { prisma } from "db";
+import { prisma, type Prisma } from "db";
 
 type QueryPageRow = {
   query: string;
@@ -39,7 +39,7 @@ export async function writeGscIssues(projectId: string, rows: QueryPageRow[]) {
         confidence: 0.9,
       }),
       url: row.pageUrl,
-      evidence: row,
+      evidence: row as Prisma.InputJsonObject,
     });
   }
 
@@ -59,7 +59,7 @@ export async function writeGscIssues(projectId: string, rows: QueryPageRow[]) {
         confidence: 0.8,
       }),
       url: row.pageUrl,
-      evidence: row,
+      evidence: row as Prisma.InputJsonObject,
     });
   }
 }
@@ -82,7 +82,7 @@ async function upsertIssue(data: {
   effort: "s" | "m";
   priorityScore: number;
   url: string;
-  evidence: Record<string, unknown>;
+  evidence: Prisma.InputJsonValue;
 }) {
   const existing = await prisma.issue.findFirst({
     where: {

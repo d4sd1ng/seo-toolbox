@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const OPEN = [/^\/login$/, /^\/api\/auth\//, /^\/$/];
+const OPEN = [/^\/login$/, /^\/api\/auth\//, /^\/api\/billing\/webhook$/, /^\/api\/tools\//, /^\/$/];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

@@ -26,7 +26,10 @@ export async function runRankCheck(input: {
   let drops = 0;
 
   for (const kw of keywords) {
-    const serp = await fetchOrganicSerp(kw.phrase);
+    const serp = await fetchOrganicSerp(kw.phrase, {
+      country: project.defaultCountry,
+      workspaceId: input.workspaceId,
+    });
     const hit = serp.find((row) => row.domain === host || row.url.includes(host));
     const last = await prisma.rankResult.findFirst({
       where: { keywordId: kw.id },

@@ -1,6 +1,6 @@
 import { LimitError } from "core";
 import { prisma, workspacePlanCaps } from "db";
-import { dfsPost, hasDataForSeo } from "./provider";
+import { DataForSeoRateLimitError, dfsPost, hasDataForSeo, serperAutocomplete } from "./provider";
 
 export async function runKeywordExpand(input: {
   projectId: string;
@@ -19,35 +19,53 @@ export async function runKeywordExpand(input: {
 
   const caps = await workspacePlanCaps(input.workspaceId);
   const phrases = [seed];
+  let dfsRateLimited = false;
   if (hasDataForSeo()) {
-    const ideas = await dfsPost<{
-      tasks?: Array<{ result?: Array<{ items?: Array<{ keyword?: string; keyword_info?: { search_volume?: number; competition?: number; cpc?: number } }> }> }>;
-    }>("/v3/dataforseo_labs/google/keyword_ideas/live", [
-      {
-        keyword: seed,
-        location_name: "Germany",
-        language_code: "de",
-        limit: caps.keywordIdeas,
-      },
-    ]);
-    const items = ideas.tasks?.[0]?.result?.[0]?.items ?? [];
-    for (const item of items) {
-      if (item.keyword) phrases.push(item.keyword);
+    try {
+      const ideas = await dfsPost<{
+        tasks?: Array<{ result?: Array<{ items?: Array<{ keyword?: string; keyword_info?: { search_volume?: number; competition?: number; cpc?: number } }> }> }>;
+      }>("/v3/dataforseo_labs/google/keyword_ideas/live", [
+        {
+          keyword: seed,
+          location_name: "Germany",
+          language_code: "de",
+          limit: caps.keywordIdeas,
+        },
+      ]);
+      const items = ideas.tasks?.[0]?.result?.[0]?.items ?? [];
+      for (const item of items) {
+        if (item.keyword) phrases.push(item.keyword);
+      }
+    } catch (error) {
+      if (!(error instanceof DataForSeoRateLimitError)) throw error;
+      dfsRateLimited = true;
+      phrases.push(...await serperAutocomplete(seed, input.workspaceId, { strict: true }));
     }
+  } else {
+    const suggestions = await serperAutocomplete(seed, input.workspaceId);
+    phrases.push(...suggestions);
   }
 
-  const unique = [...new Set(phrases.map((p) => p.toLowerCase()))].slice(0, caps.keywordIdeas);
-  const volumes = hasDataForSeo()
-    ? await dfsPost<{
-        tasks?: Array<{
-          result?: Array<{
-            items?: Array<{ keyword?: string; search_volume?: number; competition?: number; cpc?: number }>;
-          }>;
-        }>;
-      }>("/v3/keywords_data/google_ads/search_volume/live", [
+  let unique = [...new Set(phrases.map((p) => p.toLowerCase()))].slice(0, caps.keywordIdeas);
+  let volumes: {
+    tasks?: Array<{
+      result?: Array<{
+        items?: Array<{ keyword?: string; search_volume?: number; competition?: number; cpc?: number }>;
+      }>;
+    }>;
+  } | null = null;
+  if (hasDataForSeo() && !dfsRateLimited) {
+    try {
+      volumes = await dfsPost<NonNullable<typeof volumes>>("/v3/keywords_data/google_ads/search_volume/live", [
         { keywords: unique, location_name: "Germany", language_code: "de" },
-      ])
-    : null;
+      ]);
+    } catch (error) {
+      if (!(error instanceof DataForSeoRateLimitError)) throw error;
+      dfsRateLimited = true;
+      phrases.push(...await serperAutocomplete(seed, input.workspaceId, { strict: true }));
+      unique = [...new Set(phrases.map((p) => p.toLowerCase()))].slice(0, caps.keywordIdeas);
+    }
+  }
 
   const volMap = new Map<string, { volume: number | null; difficulty: number | null; cpc: number | null }>();
   for (const item of volumes?.tasks?.[0]?.result?.[0]?.items ?? []) {

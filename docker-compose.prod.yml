@@ -1,0 +1,111 @@
+# Produktion: fertige Images aus GHCR, kein Build auf dem Server.
+# IMAGE_WEB / IMAGE_WORKER setzt die Pipeline; Fallback :latest.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: seo_toolbox
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d seo_toolbox"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  web:
+    image: ${IMAGE_WEB:-ghcr.io/OWNER/seo-toolbox/web:latest}
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/seo_toolbox?schema=public
+      REDIS_URL: redis://redis:6379
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      RATE_LIMIT_IP_SECRET: ${RATE_LIMIT_IP_SECRET:-}
+      TOOLBOX_OWNER_EMAILS: ${TOOLBOX_OWNER_EMAILS:-}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+      NODE_ENV: production
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
+      PAGESPEED_API_KEY: ${PAGESPEED_API_KEY:-}
+      DATAFORSEO_LOGIN: ${DATAFORSEO_LOGIN:-}
+      DATAFORSEO_PASSWORD: ${DATAFORSEO_PASSWORD:-}
+      SERPER_API_KEY: ${SERPER_API_KEY:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_PRICE_PRO: ${STRIPE_PRICE_PRO:-}
+      STRIPE_PRICE_AGENCY: ${STRIPE_PRICE_AGENCY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - default
+      - traefik-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-network"
+      - "traefik.http.routers.seo-toolbox.rule=Host(`seo.nurovelle.de`)"
+      - "traefik.http.routers.seo-toolbox.entrypoints=websecure"
+      - "traefik.http.routers.seo-toolbox.tls.certresolver=cloudflare"
+      - "traefik.http.routers.seo-toolbox.middlewares=security-headers@file"
+      - "traefik.http.routers.seo-toolbox.service=seo-toolbox"
+      - "traefik.http.routers.seo-toolbox-embed.rule=Host(`seo.nurovelle.de`) && Path(`/toolbox/embed`)"
+      - "traefik.http.routers.seo-toolbox-embed.entrypoints=websecure"
+      - "traefik.http.routers.seo-toolbox-embed.priority=100"
+      - "traefik.http.routers.seo-toolbox-embed.tls.certresolver=cloudflare"
+      - "traefik.http.routers.seo-toolbox-embed.middlewares=seo-toolbox-embed-headers"
+      - "traefik.http.routers.seo-toolbox-embed.service=seo-toolbox"
+      - "traefik.http.middlewares.seo-toolbox-embed-headers.headers.contentSecurityPolicy=frame-ancestors 'self' https://nurovelle.de"
+      - "traefik.http.middlewares.seo-toolbox-embed-headers.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.seo-toolbox-embed-headers.headers.stsSeconds=31536000"
+      - "traefik.http.middlewares.seo-toolbox-embed-headers.headers.stsIncludeSubdomains=true"
+      - "traefik.http.middlewares.seo-toolbox-embed-headers.headers.referrerPolicy=strict-origin-when-cross-origin"
+      - "traefik.http.services.seo-toolbox.loadbalancer.server.port=3000"
+    restart: unless-stopped
+
+  worker:
+    image: ${IMAGE_WORKER:-ghcr.io/OWNER/seo-toolbox/worker:latest}
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/seo_toolbox?schema=public
+      REDIS_URL: redis://redis:6379
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-3}
+      NODE_ENV: production
+      PAGESPEED_API_KEY: ${PAGESPEED_API_KEY:-}
+      DATAFORSEO_LOGIN: ${DATAFORSEO_LOGIN:-}
+      DATAFORSEO_PASSWORD: ${DATAFORSEO_PASSWORD:-}
+      SERPER_API_KEY: ${SERPER_API_KEY:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+
+networks:
+  default: {}
+  traefik-network:
+    external: true
