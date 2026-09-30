@@ -1,0 +1,26 @@
+.nv-toolbox { box-sizing: border-box; min-height: 100dvh; padding: clamp(1rem, 4vw, 2rem); background: #080b09; color: #f5f7f4; font-family: Inter, Arial, sans-serif; }
+.nv-toolbox * { box-sizing: border-box; }
+.nv-toolbox__header { padding-right: 3rem; }
+.nv-toolbox__eyebrow { margin: 0 0 .5rem; color: #d2ac47; font-size: .8rem; font-weight: 700; letter-spacing: .08em; }
+.nv-toolbox h1, .nv-toolbox h2 { font-family: "Eastman Grotesque Alt", Inter, Arial, sans-serif; }
+.nv-toolbox h1 { margin: 0 0 1.5rem; font-size: clamp(1.6rem, 4vw, 2.6rem); line-height: 1.1; }
+.nv-toolbox__tabs { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
+.nv-toolbox button, .nv-toolbox input, .nv-toolbox select { font: inherit; }
+.nv-toolbox__tabs button { min-height: 2.75rem; padding: .5rem .8rem; border: 1px solid #d2ac47; border-radius: .75rem; background: #15191a; color: #f5f7f4; cursor: pointer; }
+.nv-toolbox__tabs button[aria-selected="true"] { background: #112b21; color: #f7ef8a; }
+.nv-toolbox button:focus-visible, .nv-toolbox a:focus-visible, .nv-toolbox input:focus-visible { outline: 2px solid #f7ef8a; outline-offset: 2px; }
+.nv-toolbox__panel { padding: clamp(1rem, 3vw, 1.5rem); border: 1px solid rgba(210, 172, 71, .72); border-radius: 1.125rem; background: #0a1913; }
+.nv-toolbox__limit { color: #b9c3bd; margin-bottom: 1rem; font-size: .95rem; }
+.nv-toolbox__form label { display: block; margin-bottom: .5rem; font-weight: 600; }
+.nv-toolbox__input-row { display: flex; gap: .75rem; }
+.nv-toolbox__input-row input, .nv-toolbox__input-row select { flex: 1; min-width: 0; min-height: 2.75rem; padding: .5rem .75rem; border: 1px solid #d2ac47; border-radius: .75rem; background: #080b09; color: #f5f7f4; }
+.nv-toolbox__input-row button { min-height: 2.75rem; padding: .5rem 1rem; border: 1px solid #a55d07; border-radius: .75rem; background: linear-gradient(135deg, #f9f295, #e0aa3e, #faf398, #b88a44); color: #050706; font-weight: 700; cursor: pointer; }
+.nv-toolbox__input-row button:disabled { opacity: .6; cursor: not-allowed; }
+.nv-toolbox__message { margin-top: 1rem; color: #f5f7f4; }
+.nv-toolbox a { color: #f7ef8a; }
+.nv-toolbox__result { margin-top: 1.5rem; }
+.nv-toolbox__result h2 { margin: 0 0 .75rem; font-size: 1.3rem; }
+.nv-toolbox__result pre { max-height: 18rem; margin: 0; padding: 1rem; overflow: auto; border-radius: .75rem; background: #15191a; color: #f5f7f4; white-space: pre-wrap; overflow-wrap: anywhere; font: .85rem/1.5 ui-monospace, monospace; }
+.nv-toolbox__footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem 0 0; font-size: .9rem; }
+@media (max-width: 639px) { .nv-toolbox__input-row { flex-direction: column; } .nv-toolbox__input-row button { width: 100%; } }
+@media (prefers-reduced-motion: reduce) { .nv-toolbox *, .nv-toolbox *::before, .nv-toolbox *::after { animation-duration: .01ms; transition-duration: .01ms; } }

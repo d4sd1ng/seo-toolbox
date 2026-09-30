@@ -1,0 +1,42 @@
+.page {
+  min-height: 100vh;
+  background: #050706;
+  color: #f5f7f4;
+  font-family: "Inter", Arial, sans-serif;
+}
+
+.container { max-width: 75rem; margin: auto; padding: 4rem 1.5rem 2rem; }
+.header { max-width: 46rem; margin-bottom: 3rem; }
+.eyebrow { color: #d2ac47; letter-spacing: .13em; text-transform: uppercase; font-size: .85rem; }
+.header h1, .comparison h2, .faq h2, .card h2 { font-family: "Eastman Grotesque Alt", "Inter", Arial, sans-serif; }
+.header h1 { font-size: clamp(2.7rem, 6vw, 5rem); line-height: 1.05; margin: .5rem 0 1rem; }
+.header p:last-child, .card p, .note { color: #b9c3bd; }
+.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+.card { background: #112b21; border: 1px solid rgba(46,139,103,.28); border-radius: 1.125rem; padding: 2rem; display: flex; flex-direction: column; min-height: 15rem; }
+.card h2 { margin: 0; font-size: 1.8rem; }
+.card p { line-height: 1.6; flex: 1; }
+.featured { border-color: #d2ac47; box-shadow: 0 0 1.5rem rgba(210,172,71,.18); }
+.button { border: 0; border-radius: 999px; padding: .85rem 1.3rem; min-height: 2.75rem; color: #050706; background: linear-gradient(135deg,#f9f295,#e0aa3e,#faf398,#b88a44); font: 700 1rem "Inter",Arial,sans-serif; cursor: pointer; }
+.button:disabled { opacity: .65; cursor: wait; }
+.button:focus-visible, .footer a:focus-visible, .faq a:focus-visible, .faq summary:focus-visible { outline: 2px solid #f7ef8a; outline-offset: 3px; }
+.actionMuted { color: #d2ac47; font-size: .95rem; }
+.comparison, .faq { margin-top: 4rem; }
+.comparison h2, .faq h2 { font-size: clamp(1.8rem,3vw,2.5rem); }
+.tableScroll { overflow-x: auto; }
+.comparison table { border-collapse: collapse; width: 100%; min-width: 45rem; text-align: left; }
+.comparison th, .comparison td { padding: 1rem; border-bottom: 1px solid rgba(46,139,103,.28); }
+.comparison thead th { color: #d2ac47; }
+.comparison tbody th { font-weight: 600; }
+.note { font-size: .9rem; line-height: 1.5; }
+.faq details { border-bottom: 1px solid rgba(46,139,103,.28); padding: 1rem 0; }
+.faq summary { cursor: pointer; font-weight: 600; }
+.faq p { color: #b9c3bd; line-height: 1.6; }
+.faq a, .footer a { color: #d2ac47; }
+.footer { margin-top: 4rem; }
+.notice { border: 1px solid #d2ac47; border-radius: .75rem; padding: 1rem; margin: 1rem 0 2rem; }
+.error { color: #f7ef8a; font-size: .85rem; }
+@media (max-width: 700px) {
+  .container { padding: 2.5rem 1.125rem; }
+  .cards { grid-template-columns: 1fr; }
+  .card { min-height: 0; }
+}

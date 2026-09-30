@@ -1,5 +1,5 @@
 import { Queue, Worker, type Job as BullJob, type Processor } from "bullmq";
-import { assertJobLimits, incrementQuota, prisma, type JobType } from "db";
+import { assertJobLimits, incrementQuota, prisma, type JobType, type Prisma } from "db";
 import IORedis from "ioredis";
 
 export const QUEUE_NAME = "seo-jobs";
@@ -52,7 +52,7 @@ export async function enqueueJob(input: {
       type: input.type,
       moduleId: input.moduleId,
       status: "queued",
-      payload: input.payload,
+      payload: input.payload as Prisma.InputJsonObject,
     },
   });
 
@@ -83,5 +83,4 @@ export function createJobsWorker(
   });
 }
 
-export { processQueuedJob } from "./process";
 export type { BullJob };

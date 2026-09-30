@@ -4,6 +4,11 @@
   "version": "0.1.0",
   "main": "src/index.ts",
   "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./plugin": "./src/plugin.ts",
+    "./runtime": "./src/runtime.ts"
+  },
   "dependencies": {
     "cheerio": "^1.1.0",
     "core": "workspace:*",

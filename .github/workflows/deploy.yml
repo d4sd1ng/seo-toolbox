@@ -1,0 +1,94 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    permissions:
+      contents: read
+      packages: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      image_web: ${{ steps.meta.outputs.image_web }}
+      image_worker: ${{ steps.meta.outputs.image_worker }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        run: |
+          REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VER="${GITHUB_REF_NAME}"
+          else
+            VER="${GITHUB_SHA::12}"
+          fi
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+          echo "image_web=ghcr.io/${REPO}/web" >> "$GITHUB_OUTPUT"
+          echo "image_worker=ghcr.io/${REPO}/worker" >> "$GITHUB_OUTPUT"
+      - name: Build & push web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: web
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image_web }}:${{ steps.meta.outputs.version }}
+            ${{ steps.meta.outputs.image_web }}:latest
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+      - name: Build & push worker
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: worker
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image_worker }}:${{ steps.meta.outputs.version }}
+            ${{ steps.meta.outputs.image_worker }}:latest
+          cache-from: type=gha,scope=worker
+          cache-to: type=gha,mode=max,scope=worker
+
+  deploy:
+    needs: publish
+    runs-on: [self-hosted, linux, vps]
+    permissions:
+      contents: read
+      packages: read
+    if: ${{ vars.ENABLE_DEPLOY == 'true' && github.ref == 'refs/heads/main' }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pull & restart on VPS
+        env:
+          DEPLOY_PATH: /opt/seo-toolbox
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+          IMAGE_WEB: ${{ needs.publish.outputs.image_web }}:${{ needs.publish.outputs.version }}
+          IMAGE_WORKER: ${{ needs.publish.outputs.image_worker }}:${{ needs.publish.outputs.version }}
+        run: |
+          set -euo pipefail
+          test -s docker-compose.prod.yml
+          test -s "$DEPLOY_PATH/.env"
+          install -m 0644 docker-compose.prod.yml "$DEPLOY_PATH/docker-compose.prod.yml"
+          cd "$DEPLOY_PATH"
+          export DOCKER_CONFIG="$(mktemp -d)"
+          trap 'rm -rf "$DOCKER_CONFIG"' EXIT
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+          docker compose -f docker-compose.prod.yml config --quiet
+          docker compose -f docker-compose.prod.yml pull
+          docker compose -f docker-compose.prod.yml up -d --remove-orphans

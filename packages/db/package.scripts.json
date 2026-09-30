@@ -1,0 +1,11 @@
+{
+  "scripts": {
+    "generate": "prisma generate",
+    "migrate": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "migrate:status": "prisma migrate status",
+    "studio": "prisma studio --browser none --port 5555",
+    "push": "prisma db push",
+    "seed": "tsx prisma/seed.ts"
+  }
+}

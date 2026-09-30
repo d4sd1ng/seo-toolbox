@@ -7,7 +7,7 @@ export async function loadOwnedProject(projectId: string) {
   if (!session) return { project: null, session: null, error: unauthorized() };
   const project = await prisma.project.findFirst({
     where: { id: projectId, workspaceId: session.workspaceId },
-    include: { settings: true },
+    include: { settings: true, workspace: { select: { plan: true } } },
   });
   if (!project) return { project: null, session, error: NextResponse.json({ error: "Nicht gefunden" }, { status: 404 }) };
   return { project, session, error: null };

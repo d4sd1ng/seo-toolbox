@@ -1,7 +1,7 @@
 import { prisma } from "db";
-import { runSiteCrawl } from "module-crawler";
+import { runSiteCrawl } from "module-crawler/runtime";
 import { runGscSync } from "module-gsc";
-import { runOnPageAudit } from "module-onpage";
+import { runOnPageAudit } from "module-onpage/runtime";
 import { runBacklinkSync, runContentBrief, runKeywordExpand, runRankCheck } from "module-intel";
 import { runPageSpeed } from "module-pagespeed";
 import type { QueueJobPayload } from "./index";
@@ -91,7 +91,12 @@ export async function processQueuedJob(data: QueueJobPayload) {
       data: {
         status: "failed",
         finishedAt: new Date(),
-        error: error instanceof Error ? error.message : "unknown",
+        error:
+          error instanceof Error
+            ? "code" in error && typeof (error as { code?: unknown }).code === "string"
+              ? `${(error as { code: string }).code}: ${error.message}`
+              : error.message
+            : "unknown",
       },
     });
     throw error;

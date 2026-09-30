@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: seo_toolbox
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d seo_toolbox"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.24.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Prisma Client
+        run: pnpm db:generate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/seo_toolbox?schema=public
+      - name: Migrations vs schema
+        working-directory: packages/db
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/seo_toolbox?schema=public
+          SHADOW_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/seo_toolbox_shadow?schema=public
+        run: |
+          if ! ls prisma/migrations/*/migration.sql >/dev/null 2>&1; then
+            echo "::error::Keine Prisma-Migrationen. Einmal scripts/prisma-baseline.sh ausführen und committen."
+            exit 1
+          fi
+          pnpm exec prisma migrate diff \
+            --from-migrations prisma/migrations \
+            --to-schema-datamodel prisma/schema.prisma \
+            --shadow-database-url "$SHADOW_DATABASE_URL" \
+            --exit-code
+      - name: Unit tests
+        run: pnpm test
+      - name: Typecheck web
+        run: pnpm --filter web exec tsc --noEmit
+        continue-on-error: true
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: test
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: web
+          push: false
+          tags: seo-toolbox-web:ci
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=min,scope=web
+      - name: Build worker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: worker
+          push: false
+          tags: seo-toolbox-worker:ci
+          cache-from: type=gha,scope=worker
+          cache-to: type=gha,mode=min,scope=worker

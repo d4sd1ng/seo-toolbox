@@ -19,23 +19,41 @@ export function JobForm({
   );
   const [jobId, setJobId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
   const refresh = useCallback(() => router.refresh(), [router]);
   const job = useJob(jobId, refresh);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    const res = await fetch(action, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(values),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error ?? "Start fehlgeschlagen");
-      return;
+    setPending(true);
+    try {
+      const res = await fetch(action, {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(values),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        jobId?: string;
+        id?: string;
+        error?: string;
+      };
+      if (!res.ok) {
+        setError(data.error ?? "Start fehlgeschlagen");
+        return;
+      }
+      const id = data.jobId ?? data.id;
+      if (!id) {
+        setError("Keine Job-ID in der Antwort.");
+        return;
+      }
+      setJobId(id);
+    } catch {
+      setError("Keine Verbindung zum Server.");
+    } finally {
+      setPending(false);
     }
-    setJobId(data.jobId);
   }
 
   return (
@@ -48,8 +66,11 @@ export function JobForm({
           onChange={(e) => setValues((v) => ({ ...v, [field.name]: e.target.value }))}
         />
       ))}
-      <button type="submit">{label}</button>
+      <button type="submit" disabled={pending}>
+        {pending ? "Startet…" : label}
+      </button>
       {error ? <p style={{ color: "crimson" }}>{error}</p> : null}
+      {jobId && !job ? <p>In der Queue…</p> : null}
       <JobStatus job={job} />
     </form>
   );

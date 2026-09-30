@@ -2,13 +2,21 @@
   "name": "module-crawler",
   "private": true,
   "version": "0.1.0",
-  "main": "src/index.ts",
-  "types": "src/index.ts",
+  "main": "src/plugin.ts",
+  "types": "src/plugin.ts",
+  "exports": {
+    ".": "./src/plugin.ts",
+    "./plugin": "./src/plugin.ts",
+    "./runtime": "./src/runtime.ts"
+  },
   "dependencies": {
     "cheerio": "^1.1.0",
     "core": "workspace:*",
     "db": "workspace:*",
+    "ioredis": "^5.11.1",
+    "ipaddr.js": "^2.5.0",
     "playwright": "^1.54.0",
-    "plugin-sdk": "workspace:*"
+    "plugin-sdk": "workspace:*",
+    "undici": "^6.29.0"
   }
 }

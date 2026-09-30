@@ -142,8 +142,11 @@ model Workspace {
   id        String   @id @default(cuid())
   name      String
   slug      String   @unique
-  plan      Plan     @default(free)
-  createdAt DateTime @default(now())
+  plan                 Plan     @default(free)
+  stripeCustomerId     String?  @unique
+  stripeSubscriptionId String?
+  stripePriceId        String?
+  createdAt            DateTime @default(now())
 
   members      Membership[]
   projects     Project[]
@@ -181,6 +184,18 @@ model QuotaBucket {
 
   @@unique([workspaceId, key, periodStart])
   @@index([workspaceId, periodStart])
+}
+
+model RateLimitBucket {
+  id          String   @id @default(cuid())
+  ipHash      String
+  tool        String
+  periodStart DateTime
+  count       Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@unique([ipHash, tool, periodStart])
+  @@index([periodStart])
 }
 
 model Membership {

@@ -17,13 +17,35 @@ export function useJob(jobId: string | null, onDone?: () => void) {
     if (!jobId) return;
     let cancelled = false;
     const tick = async () => {
-      const res = await fetch(`/api/jobs/${jobId}`);
-      if (!res.ok || cancelled) return;
-      const data = (await res.json()) as JobState;
-      setJob(data);
-      if (data.status === "succeeded" || data.status === "failed") {
-        onDone?.();
-        return;
+      try {
+        const res = await fetch(`/api/jobs/${jobId}`, { credentials: "include" });
+        if (cancelled) return;
+        if (!res.ok) {
+          setJob({
+            id: jobId,
+            status: "failed",
+            progress: 0,
+            error: res.status === 401 ? "Bitte neu anmelden." : "Prüfung konnte nicht geladen werden.",
+            resultSummary: null,
+          });
+          return;
+        }
+        const data = (await res.json()) as JobState;
+        setJob(data);
+        if (data.status === "succeeded" || data.status === "failed") {
+          onDone?.();
+          return;
+        }
+      } catch {
+        if (!cancelled) {
+          setJob({
+            id: jobId,
+            status: "queued",
+            progress: 0,
+            error: null,
+            resultSummary: "Wird vorbereitet…",
+          });
+        }
       }
       window.setTimeout(tick, 1200);
     };
@@ -39,19 +61,20 @@ export function useJob(jobId: string | null, onDone?: () => void) {
 export function JobStatus({ job }: { job: JobState | null }) {
   if (!job) return null;
   if (job.status === "failed") {
-    return <p style={{ color: "crimson" }}>{job.error ?? "Job fehlgeschlagen"}</p>;
+    return <p style={{ color: "crimson" }}>{job.error ?? "Prüfung fehlgeschlagen"}</p>;
   }
   return (
     <p>
-      {label(job.status)} · {job.progress}%
+      {label(job.status)}
+      {job.progress > 0 ? ` · ${job.progress}%` : ""}
       {job.resultSummary ? ` · ${job.resultSummary}` : ""}
     </p>
   );
 }
 
 function label(status: string) {
-  if (status === "queued") return "In der Queue";
-  if (status === "running") return "Läuft";
+  if (status === "queued") return "In Bearbeitung";
+  if (status === "running") return "Analyse läuft";
   if (status === "succeeded") return "Fertig";
   return status;
 }
