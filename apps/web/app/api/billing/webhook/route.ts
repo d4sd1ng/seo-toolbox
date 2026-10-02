@@ -1,27 +1,19 @@
 import { prisma } from "db";
 import { NextResponse } from "next/server";
-import { planForPriceId, verifyStripeSignature } from "@/lib/stripe";
+import { planForPriceId, stripeGet, verifyStripeSignature } from "@/lib/stripe";
 
-type StripeObj = Record<string, unknown>;
-
-function priceFromSub(sub: StripeObj | null | undefined) {
-  const items = sub?.items as { data?: Array<{ price?: { id?: string } }> } | undefined;
-  return items?.data?.[0]?.price?.id ?? null;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-async function applySubscription(workspaceId: string | undefined, sub: StripeObj) {
-  if (!workspaceId) return;
-  const status = String(sub.status ?? "");
-  const priceId = priceFromSub(sub);
-  const paid = status === "active" || status === "trialing";
-  await prisma.workspace.update({
-    where: { id: workspaceId },
-    data: {
-      plan: paid ? planForPriceId(priceId) : "free",
-      stripeSubscriptionId: String(sub.id ?? ""),
-      stripePriceId: priceId,
-    },
-  });
+function subscriptionFrom(value: unknown) {
+  if (!isRecord(value) || typeof value.id !== "string" ||
+      typeof value.customer !== "string" || typeof value.status !== "string" ||
+      !isRecord(value.items) || !Array.isArray(value.items.data)) return null;
+  const first: unknown = value.items.data[0];
+  const priceId = isRecord(first) && isRecord(first.price) && typeof first.price.id === "string"
+    ? first.price.id : null;
+  return { id: value.id, customer: value.customer, status: value.status, priceId };
 }
 
 export async function POST(request: Request) {
@@ -29,54 +21,44 @@ export async function POST(request: Request) {
   if (!verifyStripeSignature(raw, request.headers.get("stripe-signature"))) {
     return NextResponse.json({ error: "Ungültige Signatur" }, { status: 400 });
   }
-  const event = JSON.parse(raw) as { type: string; data: { object: StripeObj } };
-  const obj = event.data.object;
-  const meta = (obj.metadata ?? {}) as { workspaceId?: string; plan?: string };
-
-  if (event.type === "checkout.session.completed") {
-    const workspaceId = meta.workspaceId;
-    const subId = obj.subscription ? String(obj.subscription) : null;
-    if (workspaceId && subId) {
-      await prisma.workspace.update({
-        where: { id: workspaceId },
-        data: {
-          stripeCustomerId: obj.customer ? String(obj.customer) : undefined,
-          stripeSubscriptionId: subId,
-          plan: meta.plan === "agency" || meta.plan === "pro" ? meta.plan : "pro",
-        },
-      });
-    }
+  let event: unknown;
+  try {
+    event = JSON.parse(raw);
+  } catch {
+    return NextResponse.json({ error: "Ungültiges Ereignis" }, { status: 400 });
   }
-
-  if (
-    event.type === "customer.subscription.updated" ||
-    event.type === "customer.subscription.created"
-  ) {
-    const workspaceId =
-      meta.workspaceId ??
-      (
-        await prisma.workspace.findFirst({
-          where: { stripeCustomerId: obj.customer ? String(obj.customer) : "__none__" },
-        })
-      )?.id;
-    await applySubscription(workspaceId, obj);
+  if (!isRecord(event) || typeof event.type !== "string" ||
+      !isRecord(event.data) || !isRecord(event.data.object)) {
+    return NextResponse.json({ error: "Ungültiges Ereignis" }, { status: 400 });
   }
-
-  if (event.type === "customer.subscription.deleted") {
-    const workspace =
-      (meta.workspaceId
-        ? await prisma.workspace.findUnique({ where: { id: meta.workspaceId } })
-        : null) ??
-      (await prisma.workspace.findFirst({
-        where: { stripeSubscriptionId: String(obj.id ?? "") },
-      }));
-    if (workspace) {
-      await prisma.workspace.update({
-        where: { id: workspace.id },
-        data: { plan: "free", stripeSubscriptionId: null, stripePriceId: null },
-      });
-    }
+  if (!["customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted"].includes(event.type)) {
+    return NextResponse.json({ received: true });
   }
-
+  const object = event.data.object;
+  if (typeof object.id !== "string" || !/^sub_[a-zA-Z0-9]+$/.test(object.id)) {
+    return NextResponse.json({ error: "Ungültiges Abonnement" }, { status: 400 });
+  }
+  try {
+    // Read the current subscription because Stripe can deliver events out of order.
+    const subscription = subscriptionFrom(await stripeGet(`subscriptions/${object.id}`));
+    if (!subscription || subscription.id !== object.id) throw new Error("Invalid Stripe subscription response");
+    const ended = subscription.status === "canceled" || subscription.status === "incomplete_expired";
+    const paid = subscription.status === "active" || subscription.status === "trialing";
+    await prisma.workspace.updateMany({
+      where: {
+        stripeCustomerId: subscription.customer,
+        ...(ended
+          ? { stripeSubscriptionId: subscription.id }
+          : { OR: [{ stripeSubscriptionId: null }, { stripeSubscriptionId: subscription.id }] }),
+      },
+      data: {
+        plan: paid ? planForPriceId(subscription.priceId) : "free",
+        stripeSubscriptionId: ended ? null : subscription.id,
+        stripePriceId: ended ? null : subscription.priceId,
+      },
+    });
+  } catch {
+    return NextResponse.json({ error: "Abonnement konnte nicht aktualisiert werden." }, { status: 503 });
+  }
   return NextResponse.json({ received: true });
 }

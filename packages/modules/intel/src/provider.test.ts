@@ -26,6 +26,24 @@ describe("DataForSEO rate-limit fallback", () => {
     await expect(dfsPost("/v3/example", [{}])).rejects.toBeInstanceOf(DataForSeoRateLimitError);
   });
 
+  it("recognizes duplicate-task limits as rate limits", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({
+      status_code: 20000,
+      tasks: [{ status_code: 40205 }],
+    })));
+
+    await expect(dfsPost("/v3/example", [{}])).rejects.toBeInstanceOf(DataForSeoRateLimitError);
+  });
+
+  it("does not treat a failed task inside HTTP 200 as success", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({
+      status_code: 20000,
+      tasks: [{ status_code: 40501, status_message: "Invalid field" }],
+    })));
+
+    await expect(dfsPost("/v3/example", [{}])).rejects.toThrow("Invalid field");
+  });
+
   it("uses Serper after a DataForSEO limit, while keeping DataForSEO first", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(Response.json({ status_code: 40202, tasks: [] }))

@@ -109,18 +109,25 @@ export async function dfsPost<T>(path: string, body: unknown): Promise<T> {
   const json = (await res.json()) as T & {
     status_code?: number;
     status_message?: string;
-    tasks?: Array<{ status_code?: number }>;
+    tasks?: Array<{ status_code?: number; status_message?: string }>;
   };
+  const rateLimitCodes = new Set([40202, 40205, 40206, 40209]);
   if (
     res.status === 429 ||
-    json.status_code === 40202 ||
-    json.status_code === 40209 ||
-    json.tasks?.some((task) => task.status_code === 40202 || task.status_code === 40209)
+    (json.status_code !== undefined && rateLimitCodes.has(json.status_code)) ||
+    json.tasks?.some((task) => task.status_code !== undefined && rateLimitCodes.has(task.status_code))
   ) {
     throw new DataForSeoRateLimitError();
   }
   if (!res.ok) {
     throw new Error(json.status_message ?? `DataForSEO HTTP ${res.status}`);
+  }
+  if (json.status_code !== undefined && json.status_code !== 20000 && json.status_code !== 20100) {
+    throw new Error(json.status_message ?? `DataForSEO status ${json.status_code}`);
+  }
+  const failedTask = json.tasks?.find((task) => task.status_code !== undefined && task.status_code !== 20000 && task.status_code !== 20100);
+  if (failedTask) {
+    throw new Error(failedTask.status_message ?? `DataForSEO task status ${failedTask.status_code}`);
   }
   return json;
 }

@@ -21,6 +21,25 @@ export async function POST(request: Request) {
   const workspace = await prisma.workspace.findUniqueOrThrow({
     where: { id: session.workspaceId },
   });
+  if (!process.env.STRIPE_SECRET_KEY) {
+    return NextResponse.json({ error: "Zahlungen sind derzeit nicht verfügbar." }, { status: 503 });
+  }
+  if (workspace.stripeSubscriptionId) {
+    if (!workspace.stripeCustomerId) {
+      return NextResponse.json({ error: "Abonnementverwaltung ist derzeit nicht verfügbar." }, { status: 503 });
+    }
+    const portal = await stripeForm("billing_portal/sessions", {
+      customer: workspace.stripeCustomerId,
+      return_url: `${appUrl()}${body.returnTo === "/preise" ? "/preise" : "/settings"}`,
+    });
+    return NextResponse.json({ url: portal.url });
+  }
+  let priceId: string;
+  try {
+    priceId = priceIdForPlan(body.plan);
+  } catch {
+    return NextResponse.json({ error: "Dieser Tarif ist derzeit nicht buchbar." }, { status: 503 });
+  }
   let customerId = workspace.stripeCustomerId;
   if (!customerId) {
     const customer = await stripeForm("customers", {
@@ -39,7 +58,7 @@ export async function POST(request: Request) {
     customer: customerId,
     success_url: `${appUrl()}${body.returnTo === "/preise" ? "/preise" : "/settings"}?billing=success`,
     cancel_url: `${appUrl()}${body.returnTo === "/preise" ? "/preise" : "/settings"}?billing=cancel`,
-    "line_items[0][price]": priceIdForPlan(body.plan),
+    "line_items[0][price]": priceId,
     "line_items[0][quantity]": "1",
     "subscription_data[metadata][workspaceId]": workspace.id,
     "metadata[workspaceId]": workspace.id,
