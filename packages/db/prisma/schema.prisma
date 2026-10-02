@@ -170,6 +170,7 @@ model Session {
 
   @@index([userId])
   @@index([expiresAt])
+  @@index([userId, expiresAt])
 }
 
 model QuotaBucket {
@@ -301,6 +302,7 @@ model Page {
   @@unique([projectId, urlNormalized])
   @@index([projectId, statusClass])
   @@index([projectId, indexable])
+  @@index([projectId, httpStatus])
 }
 
 model Crawl {
@@ -398,6 +400,7 @@ model Keyword {
 
   @@unique([projectId, phrase, locale, country, device])
   @@index([projectId, clusterId])
+  @@index([projectId])
 }
 
 model RankResult {
@@ -466,6 +469,8 @@ model Job {
   crawl     Crawl?
 
   @@index([projectId, status])
+  @@index([projectId, status, createdAt(sort: Desc)])
+  @@index([type, status])
   @@index([workspaceId, createdAt])
 }
 
