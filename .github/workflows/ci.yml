@@ -46,16 +46,15 @@ jobs:
         working-directory: packages/db
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/seo_toolbox?schema=public
-          SHADOW_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/seo_toolbox_shadow?schema=public
         run: |
           if ! ls prisma/migrations/*/migration.sql >/dev/null 2>&1; then
             echo "::error::Keine Prisma-Migrationen. Einmal scripts/prisma-baseline.sh ausführen und committen."
             exit 1
           fi
+          node prisma-deploy.mjs
           pnpm exec prisma migrate diff \
-            --from-migrations prisma/migrations \
+            --from-url "$DATABASE_URL" \
             --to-schema-datamodel prisma/schema.prisma \
-            --shadow-database-url "$SHADOW_DATABASE_URL" \
             --exit-code
       - name: Unit tests
         run: pnpm test

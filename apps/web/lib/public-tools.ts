@@ -152,7 +152,7 @@ export async function keywordCheck(seed: string) {
   if (hasDataForSeo()) {
     try {
       const result = await dfsPost<{ tasks?: Array<{ result?: Array<{ items?: Array<{ keyword?: string }> }> }> }>("/v3/dataforseo_labs/google/keyword_ideas/live", [
-        { keyword, location_name: "Germany", language_code: "de", limit: 10 },
+        { keywords: [keyword], location_name: "Germany", language_code: "de", limit: 10 },
       ]);
       suggestions = (result.tasks?.[0]?.result?.[0]?.items ?? []).flatMap((row) => row.keyword ? [row.keyword] : []);
       provider = "dataforseo";
