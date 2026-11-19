@@ -1,0 +1,1 @@
+ALTER TABLE "Session" ADD COLUMN "emailVerified" BOOLEAN NOT NULL DEFAULT false;

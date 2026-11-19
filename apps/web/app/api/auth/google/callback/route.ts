@@ -1,6 +1,6 @@
 import { prisma } from "db";
 import { NextRequest, NextResponse } from "next/server";
-import { attachSessionCookie, createSessionToken } from "@/lib/auth";
+import { attachSessionCookie, createSessionToken, getSession } from "@/lib/auth";
 import { googleClient, GOOGLE_NEXT_COOKIE, GOOGLE_STATE_COOKIE, safeNext, temporaryCookieOptions, validState } from "@/lib/google-login";
 
 function clearGoogleCookies(response: NextResponse) {
@@ -45,6 +45,13 @@ export async function GET(request: NextRequest) {
       update: {},
       include: { memberships: true },
     });
+    // A verified email must not silently link to a password account created by someone else.
+    if (user.passwordHash) {
+      const session = await getSession();
+      if (session?.userId !== user.id) {
+        return loginError(request, "Bitte zuerst mit dem bestehenden Passwort anmelden und den Google-Login erneut starten.");
+      }
+    }
     let membership = user.memberships[0];
     if (!membership) {
       const workspace = await prisma.workspace.create({
@@ -58,7 +65,7 @@ export async function GET(request: NextRequest) {
         data: { userId: user.id, workspaceId: workspace.id, role: "owner" },
       });
     }
-    const token = await createSessionToken(user.id, membership.workspaceId);
+    const token = await createSessionToken(user.id, membership.workspaceId, { emailVerified: true });
     const storedNext = request.cookies.get(GOOGLE_NEXT_COOKIE)?.value ?? null;
     const destination = storedNext === "homepage"
       ? new URL("https://nurovelle.de/homepage/detail_seo.html?owner=1")

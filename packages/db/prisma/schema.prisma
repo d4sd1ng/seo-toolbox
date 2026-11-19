@@ -159,6 +159,7 @@ model Workspace {
 model Session {
   id          String   @id @default(cuid())
   tokenHash   String   @unique
+  emailVerified Boolean @default(false)
   userId      String
   workspaceId String
   expiresAt   DateTime

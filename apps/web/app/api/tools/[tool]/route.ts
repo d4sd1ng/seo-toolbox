@@ -39,7 +39,7 @@ async function context(request: Request, slug: string) {
   const workspace = session ? await prisma.workspace.findUnique({ where: { id: session.workspaceId }, select: { plan: true } }) : null;
   const plan: Plan = workspace?.plan ?? "free";
   const ownerEmail = session?.user.email;
-  const status = await publicToolStatus(request, tool, plan, ownerEmail);
+  const status = await publicToolStatus(request, tool, plan, ownerEmail, session?.emailVerified);
   return { tool, session, plan, ownerEmail, status };
 }
 
@@ -54,7 +54,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ tool
     const ctx = await context(request, slug);
     if (!ctx) return json(request, { error: "Tool nicht gefunden.", code: "not_found" }, 404);
     const { visitor, ...status } = ctx.status;
-    const projects = slug === "gsc-preview" && ctx.session && isPlatformOwner(ctx.ownerEmail)
+    const projects = slug === "gsc-preview" && ctx.session && isPlatformOwner(ctx.ownerEmail, ctx.session?.emailVerified)
       ? await prisma.project.findMany({
           where: { workspaceId: ctx.session.workspaceId, gscSiteUrl: { not: null } },
           select: { id: true, name: true, gscSiteUrl: true },
@@ -79,7 +79,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ too
     if (!ctx.status.available) {
       return json(request, { error: "Dieses Tool ist in deinem aktuellen Tarif nicht verfügbar.", code: "plan_unavailable" }, 403, token);
     }
-    if (slug === "gsc-preview" && !isPlatformOwner(ctx.ownerEmail)) {
+    if (slug === "gsc-preview" && !isPlatformOwner(ctx.ownerEmail, ctx.session?.emailVerified)) {
       return json(request, { error: "Nur für Owner verfügbar.", code: "owner_only" }, 403, token);
     }
     const body = (await request.json().catch(() => null)) as { url?: unknown; seed?: unknown; projectId?: unknown } | null;
@@ -101,7 +101,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ too
       }
       reservedTrial = true;
     }
-    const limited = await enforceToolRateLimit(request, ctx.tool, { plan: ctx.plan, ownerEmail: ctx.ownerEmail });
+    const limited = await enforceToolRateLimit(request, ctx.tool, { plan: ctx.plan, ownerEmail: ctx.ownerEmail, ownerEmailVerified: ctx.session?.emailVerified });
     if (limited) {
       if (reservedTrial) await releaseAnonymousTrial(token);
       return cors(request, attachVisitorCookie(limited, token));
@@ -120,7 +120,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ too
       const rows = await querySearchAnalytics({ accessToken: credentials.accessToken, siteUrl: project.gscSiteUrl, startDate: start.toISOString().slice(0, 10), endDate: end.toISOString().slice(0, 10), dimensions: ["query"], rowLimit: 10 });
       data = { siteUrl: project.gscSiteUrl, rows };
     }
-    const latest = await publicToolStatus(request, ctx.tool, ctx.plan, ctx.ownerEmail);
+    const latest = await publicToolStatus(request, ctx.tool, ctx.plan, ctx.ownerEmail, ctx.session?.emailVerified);
     const { visitor: _visitor, ...limits } = latest;
     return json(request, { ok: true, tool: slug, data, limits, gateRequired: !ctx.session }, 200, token);
   } catch (error) {

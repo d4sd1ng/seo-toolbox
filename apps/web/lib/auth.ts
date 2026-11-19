@@ -12,6 +12,7 @@ export type AuthSession = {
   userId: string;
   workspaceId: string;
   exp: number;
+  emailVerified: boolean;
   user: { id: string; email: string; name: string | null };
 };
 
@@ -39,7 +40,7 @@ export function clearSessionCookieOn(response: NextResponse) {
   return response;
 }
 
-export async function createSessionToken(userId: string, workspaceId: string) {
+export async function createSessionToken(userId: string, workspaceId: string, options: { emailVerified?: boolean } = {}) {
   const membership = await prisma.membership.findUnique({
     where: { workspaceId_userId: { workspaceId, userId } },
   });
@@ -48,6 +49,7 @@ export async function createSessionToken(userId: string, workspaceId: string) {
   await prisma.session.create({
     data: {
       tokenHash: hashToken(token),
+      emailVerified: options.emailVerified === true,
       userId,
       workspaceId,
       expiresAt: new Date(Date.now() + TTL_MS),
@@ -84,6 +86,7 @@ export async function getSession(): Promise<AuthSession | null> {
       userId: row.userId,
       workspaceId: row.workspaceId,
       exp: row.expiresAt.getTime(),
+      emailVerified: row.emailVerified === true,
       user: { id: row.user.id, email: row.user.email, name: row.user.name },
     };
   } catch (error) {

@@ -46,8 +46,8 @@ function clientIp(request: Request) {
   return isIP(candidate) ? candidate : "unknown";
 }
 
-export function isPlatformOwner(email?: string) {
-  if (!email) return false;
+export function isPlatformOwner(email?: string, emailVerified = false) {
+  if (!email || emailVerified !== true) return false;
   const allowlist = (process.env.TOOLBOX_OWNER_EMAILS ?? "")
     .split(",")
     .map((item) => item.trim().toLowerCase())
@@ -100,10 +100,10 @@ export function attachVisitorCookie(response: NextResponse, token: string) {
   return response;
 }
 
-export async function publicToolStatus(request: Request, tool: RateLimitedTool, plan: Plan, ownerEmail?: string) {
+export async function publicToolStatus(request: Request, tool: RateLimitedTool, plan: Plan, ownerEmail?: string, ownerEmailVerified = false) {
   const secret = ipSecret();
   const visitor = visitorFromRequest(request, secret);
-  const owner = isPlatformOwner(ownerEmail);
+  const owner = isPlatformOwner(ownerEmail, ownerEmailVerified);
   const limit = owner ? null : toolHourlyLimit(tool, plan);
   const periodStart = utcHourStart(Date.now());
   const ipHash = createHmac("sha256", secret).update(clientIp(request)).digest("hex");
@@ -150,13 +150,13 @@ export async function releaseAnonymousTrial(token: string) {
 export async function enforceToolRateLimit(
   request: Request,
   tool: RateLimitedTool,
-  options: { plan?: Plan; ownerEmail?: string } = {},
+  options: { plan?: Plan; ownerEmail?: string; ownerEmailVerified?: boolean } = {},
 ) {
   const plan = options.plan ?? "free";
   const ownerExempt =
     tool !== "account_register" &&
     tool !== "account_login" &&
-    isPlatformOwner(options.ownerEmail);
+    isPlatformOwner(options.ownerEmail, options.ownerEmailVerified);
   if (ownerExempt) return null;
 
   const limit = toolHourlyLimit(tool, plan);

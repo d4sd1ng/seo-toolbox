@@ -21,25 +21,20 @@ export async function POST(request: Request) {
     }
     const email = fields.email.toLowerCase();
     const exists = await prisma.user.findUnique({ where: { email } });
-    if (exists?.passwordHash) {
+    if (exists) {
       return authError(fields.json, request, "Konto existiert bereits", 409);
     }
     const slug =
       email.split("@")[0].replace(/[^a-z0-9]+/gi, "-").toLowerCase() +
       "-" +
       Date.now().toString(36);
-    const user = exists
-      ? await prisma.user.update({
-          where: { id: exists.id },
-          data: { passwordHash: hashPassword(fields.password), name: fields.name || exists.name },
-        })
-      : await prisma.user.create({
-          data: {
-            email,
-            name: fields.name || email.split("@")[0],
-            passwordHash: hashPassword(fields.password),
-          },
-        });
+    const user = await prisma.user.create({
+      data: {
+        email,
+        name: fields.name || email.split("@")[0],
+        passwordHash: hashPassword(fields.password),
+      },
+    });
     const workspace = await prisma.workspace.create({
       data: {
         name: fields.name || `${email.split("@")[0]} Workspace`,
@@ -53,6 +48,9 @@ export async function POST(request: Request) {
     const token = await createSessionToken(user.id, workspace.id);
     return authOk(fields.json, request, token, fields.next);
   } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "P2002") {
+      return authError(fields.json, request, "Konto existiert bereits", 409);
+    }
     console.error("register", error);
     return authError(fields.json, request, prismaHint(error), 500);
   }
