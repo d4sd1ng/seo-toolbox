@@ -27,17 +27,27 @@ export async function readAuthFields(request: Request) {
   };
 }
 
+export function authRedirectUrl(request: Request, next = "/") {
+  const base = new URL(process.env.NEXT_PUBLIC_APP_URL || request.url);
+  try {
+    const destination = new URL(next.startsWith("/") ? next : "/", base);
+    if (destination.origin === base.origin) return destination;
+  } catch {
+    // Malformed return paths stay on the application origin.
+  }
+  return new URL("/", base);
+}
+
 export function authError(json: boolean, request: Request, message: string, status = 400) {
   if (json) return NextResponse.json({ error: message }, { status });
-  const url = new URL("/login", request.url);
+  const url = authRedirectUrl(request, "/login");
   url.searchParams.set("error", message);
   return NextResponse.redirect(url);
 }
 
 export function authOk(json: boolean, request: Request, token: string, next = "/") {
-  const dest = next.startsWith("/") ? next : "/";
   if (json) return attachSessionCookie(NextResponse.json({ ok: true }), token);
-  return attachSessionCookie(NextResponse.redirect(new URL(dest, request.url)), token);
+  return attachSessionCookie(NextResponse.redirect(authRedirectUrl(request, next)), token);
 }
 
 export function prismaHint(error: unknown) {

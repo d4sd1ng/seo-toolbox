@@ -1,4 +1,5 @@
 import { prisma } from "db";
+import { authRedirectUrl } from "@/lib/auth-http";
 import { NextRequest, NextResponse } from "next/server";
 import { attachSessionCookie, createSessionToken, getSession } from "@/lib/auth";
 import { googleClient, GOOGLE_NEXT_COOKIE, GOOGLE_STATE_COOKIE, safeNext, temporaryCookieOptions, validState } from "@/lib/google-login";
@@ -11,7 +12,7 @@ function clearGoogleCookies(response: NextResponse) {
 }
 
 function loginError(request: NextRequest, message: string) {
-  const url = new URL("/login", request.url);
+  const url = authRedirectUrl(request, "/login");
   url.searchParams.set("error", message);
   return clearGoogleCookies(NextResponse.redirect(url));
 }
@@ -69,7 +70,7 @@ export async function GET(request: NextRequest) {
     const storedNext = request.cookies.get(GOOGLE_NEXT_COOKIE)?.value ?? null;
     const destination = storedNext === "homepage"
       ? new URL("https://nurovelle.de/homepage/detail_seo.html?owner=1")
-      : new URL(safeNext(storedNext), request.url);
+      : authRedirectUrl(request, safeNext(storedNext));
     const response = attachSessionCookie(NextResponse.redirect(destination), token);
     return clearGoogleCookies(response);
   } catch (error) {

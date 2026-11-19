@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   profile: { email: "owner@example.com", email_verified: true, name: "Owner" },
   user: { upsert: vi.fn() },
@@ -34,6 +34,7 @@ function request(state = "valid-state") {
 describe("Google email proof", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://seo.nurovelle.de");
     mocks.profile.email_verified = true;
     vi.mocked(getSession).mockResolvedValue(null);
     mocks.getToken.mockResolvedValue({ tokens: { id_token: "test-id-token" } });
@@ -42,6 +43,21 @@ describe("Google email proof", () => {
       id: "user",
       memberships: [{ workspaceId: "workspace" }],
     });
+  });
+  afterEach(() => vi.unstubAllEnvs());
+  it("uses the public origin for callback errors behind the proxy", async () => {
+    const response = await GET(
+      new NextRequest("https://0.0.0.0:3000/api/auth/google/callback?state=invalid&code=invalid"),
+    );
+    expect(new URL(response.headers.get("location")!).origin).toBe("https://seo.nurovelle.de");
+  });
+  it("uses the public origin for normal Google-login returns", async () => {
+    const response = await GET(
+      new NextRequest("https://0.0.0.0:3000/api/auth/google/callback?state=valid-state&code=test", {
+        headers: { cookie: "seo_google_state=valid-state" },
+      }),
+    );
+    expect(response.headers.get("location")).toBe("https://seo.nurovelle.de/");
   });
   it("creates a verified session only after Google token and email verification", async () => {
     const response = await GET(request());
